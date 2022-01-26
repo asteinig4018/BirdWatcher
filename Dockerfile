@@ -1,4 +1,4 @@
 FROM tensorflow/tensorflow
-COPY . /app
-WORKDIR /app
+COPY . /conent
+WORKDIR /conent
 CMD pip install -r requirements.txt
