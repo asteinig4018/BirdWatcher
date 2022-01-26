@@ -1,5 +1,5 @@
 flatbuffers==2.0
-gdown==3.6.4
+gdown
 googledrivedownloader==0.4
 jupyter==1.0.0
 keras==2.7.0
@@ -10,7 +10,7 @@ opencv-contrib-python==4.1.2.30
 opencv-python==4.1.2.30
 pandas==1.1.5
 pathlib==1.0.1
-Pillow==7.1.2
+Pillow
 pip-tools==6.2.0
 python-utils==3.1.0
 scikit-image==0.18.3
