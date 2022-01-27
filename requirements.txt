@@ -21,3 +21,4 @@ sklearn==0.0
 sklearn-pandas==1.8.0
 imagesize
 bounding-box
+ipykernel
