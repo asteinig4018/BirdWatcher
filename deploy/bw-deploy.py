@@ -54,6 +54,14 @@ class VideoStream:
 
 # end copy
 
+# from https://stackoverflow.com/questions/65824714/process-output-data-from-yolov5-tflite
+# for Yolov5 output parsing
+def classFilter(classdata):
+    classes = []  # create a list
+    for i in range(classdata.shape[0]):         # loop through all predictions
+        classes.append(classdata[i].argmax())   # get the best classification location
+    return classes  # return classes (int)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     #tflite model .tflite file
@@ -109,6 +117,8 @@ if __name__ == '__main__':
     #model details
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
+    
+    
     in_height = input_details[0]['shape'][1]
     in_width = input_details[0]['shape'][2]
 
@@ -130,10 +140,14 @@ if __name__ == '__main__':
     print("starting video stream...")
     time.sleep(1)
 
+    # Create window
+    cv2.namedWindow('Object detector', cv2.WINDOW_NORMAL)
+
     #loop infinitely and detect within an image
     try:
         while True:
-            #start copy from EdjeElectronics/TensorFlow-Lite-Object-Detection-on-Android-and-Raspberry-Pi
+            #Below based on: EdjeElectronics/TensorFlow-Lite-Object-Detection-on-Android-and-Raspberry-Pi
+            #and https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/examples/python/label_image.py#L117
             # Start timer (for calculating frame rate)
             t1 = cv2.getTickCount()
             print(str(t1) + " reading new image...")
@@ -156,10 +170,24 @@ if __name__ == '__main__':
             interpreter.invoke()
 
             # Retrieve detection results
-            print(len(output_details))
-            boxes = interpreter.get_tensor(output_details[0]['index'])[0] # Bounding box coordinates of detected objects
-            classes = interpreter.get_tensor(output_details[1]['index'])[0] # Class index of detected objects
-            scores = interpreter.get_tensor(output_details[2]['index'])[0] # Confidence of detected objects
+            
+            #yolo does not output boxes, classes, and scores separately like most other models
+            #it creates a table instead that we'll parse to get the same information
+            #source: https://stackoverflow.com/questions/65824714/process-output-data-from-yolov5-tflite
+            out_table = interpreter.get_tensor(output_details[0]['index'])[0]
+            print(type(out_table))
+            print(out_table)
+            #output is [x y w h conf class0, class1, ...]
+            boxes = np.squeeze(out_table[..., :4])
+            # Convert nx4 boxes from [x, y, w, h] to [x1, y1, x2, y2] where xy1=top-left, xy2=bottom-right
+            x, y, w, h = boxes[..., 0], boxes[..., 1], boxes[..., 2], boxes[..., 3] #xywh
+            xyxy = [x - w / 2, y - h / 2, x + w / 2, y + h / 2]  # xywh to xyxy   [4, 25200]
+            scores = np.squeeze(out_table[..., 4:5])
+            classes = classFilter(output_data[..., 5:])
+
+            #boxes = interpreter.get_tensor(output_details[0]['index'])[0] # Bounding box coordinates of detected objects
+            #classes = interpreter.get_tensor(output_details[1]['index'])[0] # Class index of detected objects
+            #scores = interpreter.get_tensor(output_details[2]['index'])[0] # Confidence of detected objects
             #num = interpreter.get_tensor(output_details[3]['index'])[0]  # Total number of detected objects (inaccurate and not needed)
 
             # Loop over all detections and draw detection box if confidence is above minimum threshold
@@ -168,10 +196,10 @@ if __name__ == '__main__':
 
                     # Get bounding box coordinates and draw box
                     # Interpreter can return coordinates that are outside of image dimensions, need to force them to be within image using max() and min()
-                    ymin = int(max(1,(boxes[i][0] * imH)))
-                    xmin = int(max(1,(boxes[i][1] * imW)))
-                    ymax = int(min(imH,(boxes[i][2] * imH)))
-                    xmax = int(min(imW,(boxes[i][3] * imW)))
+                    ymin = int(max(1,(xyxy[i][0] * cam_h)))
+                    xmin = int(max(1,(xyxy[i][1] * cam_w)))
+                    ymax = int(min(cam_h,(xyxy[i][2] * cam_h)))
+                    xmax = int(min(cam_w,(xyxy[i][3] * cam_w)))
                     
                     cv2.rectangle(frame, (xmin,ymin), (xmax,ymax), (10, 255, 0), 2)
 
@@ -197,7 +225,6 @@ if __name__ == '__main__':
             # Press 'q' to quit
             if cv2.waitKey(1) == ord('q'):
                 break
-        #end copy
 
         #handle if we break as well
         cv2.destroyAllWindows()
