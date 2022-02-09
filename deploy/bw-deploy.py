@@ -5,7 +5,9 @@
 import argparse
 import time
 import numpy as np
+import cv2
 import tflite_runtime.interpreter as tflite
+from threading import Thread
 
 #start copy
 # Define VideoStream class to handle streaming of video from webcam in separate processing thread
@@ -52,7 +54,7 @@ class VideoStream:
 
 # end copy
 
-if __name__ == 'main':
+if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     #tflite model .tflite file
     parser.add_argument(
@@ -87,13 +89,22 @@ if __name__ == 'main':
     cam_w = int(cam_w)
     cam_h = int(cam_h)
 
+    print("Deploy start...")
+    print("Using: ")
+    print("     - model: " + str(args.model))
+    print("     - labelfile: "+str(args.labelfile))
+    print("     - threshold: "+str(args.threshold))
+    print("     - resolution: "+str(args.resolution))
+
     #get labels
     labels = list()
     with open(args.labelfile, 'r') as f:
         labels = [line.strip() for line in f.readlines()]
 
     #load model
-    interpreter = Interpreter(model_path=args.model)
+    interpreter = tflite.Interpreter(model_path=args.model)
+
+    interpreter.allocate_tensors()
 
     #model details
     input_details = interpreter.get_input_details()
@@ -103,6 +114,9 @@ if __name__ == 'main':
 
     floating_model = (input_details[0]['dtype'] == np.float32)
 
+    if floating_model:
+        print("type: floating model...")
+
     input_mean = 127.5
     input_std = 127.5
 
@@ -110,7 +124,10 @@ if __name__ == 'main':
     frame_rate_calc = 1
     freq = cv2.getTickFrequency()
 
+    print("processed inputs...")
+
     videostream = VideoStream(resolution=(cam_w,cam_h), framerate=30).start()
+    print("starting video stream...")
     time.sleep(1)
 
     #loop infinitely and detect within an image
@@ -119,6 +136,7 @@ if __name__ == 'main':
             #start copy from EdjeElectronics/TensorFlow-Lite-Object-Detection-on-Android-and-Raspberry-Pi
             # Start timer (for calculating frame rate)
             t1 = cv2.getTickCount()
+            print(str(t1) + " reading new image...")
 
             # Grab frame from video stream
             frame1 = videostream.read()
@@ -138,6 +156,7 @@ if __name__ == 'main':
             interpreter.invoke()
 
             # Retrieve detection results
+            print(len(output_details))
             boxes = interpreter.get_tensor(output_details[0]['index'])[0] # Bounding box coordinates of detected objects
             classes = interpreter.get_tensor(output_details[1]['index'])[0] # Class index of detected objects
             scores = interpreter.get_tensor(output_details[2]['index'])[0] # Confidence of detected objects
