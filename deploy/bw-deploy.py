@@ -175,20 +175,14 @@ if __name__ == '__main__':
             #it creates a table instead that we'll parse to get the same information
             #source: https://stackoverflow.com/questions/65824714/process-output-data-from-yolov5-tflite
             out_table = interpreter.get_tensor(output_details[0]['index'])[0]
-            print(type(out_table))
-            print(out_table)
+        
             #output is [x y w h conf class0, class1, ...]
             boxes = np.squeeze(out_table[..., :4])
             # Convert nx4 boxes from [x, y, w, h] to [x1, y1, x2, y2] where xy1=top-left, xy2=bottom-right
             x, y, w, h = boxes[..., 0], boxes[..., 1], boxes[..., 2], boxes[..., 3] #xywh
             xyxy = [x - w / 2, y - h / 2, x + w / 2, y + h / 2]  # xywh to xyxy   [4, 25200]
             scores = np.squeeze(out_table[..., 4:5])
-            classes = classFilter(output_data[..., 5:])
-
-            #boxes = interpreter.get_tensor(output_details[0]['index'])[0] # Bounding box coordinates of detected objects
-            #classes = interpreter.get_tensor(output_details[1]['index'])[0] # Class index of detected objects
-            #scores = interpreter.get_tensor(output_details[2]['index'])[0] # Confidence of detected objects
-            #num = interpreter.get_tensor(output_details[3]['index'])[0]  # Total number of detected objects (inaccurate and not needed)
+            classes = classFilter(out_table[..., 5:])
 
             # Loop over all detections and draw detection box if confidence is above minimum threshold
             for i in range(len(scores)):
@@ -196,16 +190,21 @@ if __name__ == '__main__':
 
                     # Get bounding box coordinates and draw box
                     # Interpreter can return coordinates that are outside of image dimensions, need to force them to be within image using max() and min()
-                    ymin = int(max(1,(xyxy[i][0] * cam_h)))
-                    xmin = int(max(1,(xyxy[i][1] * cam_w)))
-                    ymax = int(min(cam_h,(xyxy[i][2] * cam_h)))
-                    xmax = int(min(cam_w,(xyxy[i][3] * cam_w)))
+                    ymin = int(max(1,(xyxy[1][i] * cam_h)))
+                    xmin = int(max(1,(xyxy[0][i] * cam_w)))
+                    ymax = int(min(cam_h,(xyxy[3][i] * cam_h)))
+                    xmax = int(min(cam_w,(xyxy[2][i] * cam_w)))
+
+                    # optionally print bounding boxes (for debugging)
+                    #print("("+str(xmin)+","+str(ymin)+"), ("+str(xmax)+","+str(ymax)+")")
                     
                     cv2.rectangle(frame, (xmin,ymin), (xmax,ymax), (10, 255, 0), 2)
 
                     # Draw label
                     object_name = labels[int(classes[i])] # Look up object name from "labels" array using class index
                     label = '%s: %d%%' % (object_name, int(scores[i]*100)) # Example: 'person: 72%'
+                    # also print output to the console (useful when boxes overlap)
+                    print(str(object_name) + ":" + str(int(scores[i]*100)) + "%")
                     labelSize, baseLine = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2) # Get font size
                     label_ymin = max(ymin, labelSize[1] + 10) # Make sure not to draw label too close to top of window
                     cv2.rectangle(frame, (xmin, label_ymin-labelSize[1]-10), (xmin+labelSize[0], label_ymin+baseLine-10), (255, 255, 255), cv2.FILLED) # Draw white box to put label text in
