@@ -14,9 +14,9 @@ The Jupyter notebook (makeMode.ipynb) contains all necessary commands to retriev
 I originally created it in Google Colab and that is where many of the image producing and plotting functions work correctly, but the functionality works across a variety of Jupyter notebook platforms. 
 
 #### Docker
-Due to the size of the dataset and time required to train the model, I first looked into training the model on my local computer using Docker. The docker system works and can be easily modified to run with a local Nvidia GPU, but I don't have one, and CPU training times are unusably long. 
+Due to the size of the dataset and time required to train the model, I first looked into training the model on my local computer using Docker. The docker system works and can be easily modified to run with a local Nvidia GPU, but I don't have one, and CPU training times are unusably long. However, VSCode's devcontainer features worked really well with this Docker.
 
-One note about Docker: local systems often have issues with Yolov5's workers. Disable them with `--worker 0`. CPU training can be similarly configured with `--device cpu`.
+One note about Docker: local systems often have issues with Yolov5's workers. Disable them with `--workers 0`. CPU training can be similarly configured with `--device cpu`.
 
 #### Saturn Cloud
 I chose Saturn cloud as an alternative to Colab for training my model. The 30 hours of free GPU time per month are more than enough to train with a couple hundred epochs. 
@@ -26,6 +26,11 @@ The deployment folder contains everything necessary for deploying this model on 
 ```
 python3 bw-deploy.py -m best-fp16.tflite
 ```
+
+#### Debugging
+OpenCV requires a bunch of packages and will give you weird errors until you install them all with apt-get. I tested this on an older Pi running Python 3.5 and was able to get all the packages.
+
+If you see `VIDIOC_QBUF: Invalid argument`, this is a weird webcamera/threading issue that comes up. I've just been restarting my Pi and it goes away. 
 
 ## Credits/Links
 [YOLOv5](https://github.com/ultralytics/yolov5)
