@@ -29,6 +29,9 @@ python3 bw-deploy.py -m best-fp16.tflite
 
 ## Credits/Links
 [YOLOv5](https://github.com/ultralytics/yolov5)
+
 [Caltech-UCSD Birds-200-2011](http://www.vision.caltech.edu/visipedia/CUB-200-2011.html)
+
 [TensorFLow Detection Example](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/examples/python/label_image.py#L117)
+
 [EdjeElectronic's Detection Example](https://github.com/EdjeElectronics/TensorFlow-Lite-Object-Detection-on-Android-and-Raspberry-Pi/blob/master/TFLite_detection_webcam.py)
