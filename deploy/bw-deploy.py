@@ -5,7 +5,9 @@
 import argparse
 import time
 import numpy as np
+import cv2
 import tflite_runtime.interpreter as tflite
+from threading import Thread
 
 #start copy
 # Define VideoStream class to handle streaming of video from webcam in separate processing thread
@@ -52,7 +54,15 @@ class VideoStream:
 
 # end copy
 
-if __name__ == 'main':
+# from https://stackoverflow.com/questions/65824714/process-output-data-from-yolov5-tflite
+# for Yolov5 output parsing
+def classFilter(classdata):
+    classes = []  # create a list
+    for i in range(classdata.shape[0]):         # loop through all predictions
+        classes.append(classdata[i].argmax())   # get the best classification location
+    return classes  # return classes (int)
+
+if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     #tflite model .tflite file
     parser.add_argument(
@@ -87,21 +97,35 @@ if __name__ == 'main':
     cam_w = int(cam_w)
     cam_h = int(cam_h)
 
+    print("Deploy start...")
+    print("Using: ")
+    print("     - model: " + str(args.model))
+    print("     - labelfile: "+str(args.labelfile))
+    print("     - threshold: "+str(args.threshold))
+    print("     - resolution: "+str(args.resolution))
+
     #get labels
     labels = list()
     with open(args.labelfile, 'r') as f:
         labels = [line.strip() for line in f.readlines()]
 
     #load model
-    interpreter = Interpreter(model_path=args.model)
+    interpreter = tflite.Interpreter(model_path=args.model)
+
+    interpreter.allocate_tensors()
 
     #model details
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
+    
+    
     in_height = input_details[0]['shape'][1]
     in_width = input_details[0]['shape'][2]
 
     floating_model = (input_details[0]['dtype'] == np.float32)
+
+    if floating_model:
+        print("type: floating model...")
 
     input_mean = 127.5
     input_std = 127.5
@@ -110,15 +134,23 @@ if __name__ == 'main':
     frame_rate_calc = 1
     freq = cv2.getTickFrequency()
 
+    print("processed inputs...")
+
     videostream = VideoStream(resolution=(cam_w,cam_h), framerate=30).start()
+    print("starting video stream...")
     time.sleep(1)
+
+    # Create window
+    cv2.namedWindow('Object detector', cv2.WINDOW_NORMAL)
 
     #loop infinitely and detect within an image
     try:
         while True:
-            #start copy from EdjeElectronics/TensorFlow-Lite-Object-Detection-on-Android-and-Raspberry-Pi
+            #Below based on: EdjeElectronics/TensorFlow-Lite-Object-Detection-on-Android-and-Raspberry-Pi
+            #and https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/examples/python/label_image.py#L117
             # Start timer (for calculating frame rate)
             t1 = cv2.getTickCount()
+            print(str(t1) + " reading new image...")
 
             # Grab frame from video stream
             frame1 = videostream.read()
@@ -138,10 +170,19 @@ if __name__ == 'main':
             interpreter.invoke()
 
             # Retrieve detection results
-            boxes = interpreter.get_tensor(output_details[0]['index'])[0] # Bounding box coordinates of detected objects
-            classes = interpreter.get_tensor(output_details[1]['index'])[0] # Class index of detected objects
-            scores = interpreter.get_tensor(output_details[2]['index'])[0] # Confidence of detected objects
-            #num = interpreter.get_tensor(output_details[3]['index'])[0]  # Total number of detected objects (inaccurate and not needed)
+            
+            #yolo does not output boxes, classes, and scores separately like most other models
+            #it creates a table instead that we'll parse to get the same information
+            #source: https://stackoverflow.com/questions/65824714/process-output-data-from-yolov5-tflite
+            out_table = interpreter.get_tensor(output_details[0]['index'])[0]
+        
+            #output is [x y w h conf class0, class1, ...]
+            boxes = np.squeeze(out_table[..., :4])
+            # Convert nx4 boxes from [x, y, w, h] to [x1, y1, x2, y2] where xy1=top-left, xy2=bottom-right
+            x, y, w, h = boxes[..., 0], boxes[..., 1], boxes[..., 2], boxes[..., 3] #xywh
+            xyxy = [x - w / 2, y - h / 2, x + w / 2, y + h / 2]  # xywh to xyxy   [4, 25200]
+            scores = np.squeeze(out_table[..., 4:5])
+            classes = classFilter(out_table[..., 5:])
 
             # Loop over all detections and draw detection box if confidence is above minimum threshold
             for i in range(len(scores)):
@@ -149,16 +190,21 @@ if __name__ == 'main':
 
                     # Get bounding box coordinates and draw box
                     # Interpreter can return coordinates that are outside of image dimensions, need to force them to be within image using max() and min()
-                    ymin = int(max(1,(boxes[i][0] * imH)))
-                    xmin = int(max(1,(boxes[i][1] * imW)))
-                    ymax = int(min(imH,(boxes[i][2] * imH)))
-                    xmax = int(min(imW,(boxes[i][3] * imW)))
+                    ymin = int(max(1,(xyxy[1][i] * cam_h)))
+                    xmin = int(max(1,(xyxy[0][i] * cam_w)))
+                    ymax = int(min(cam_h,(xyxy[3][i] * cam_h)))
+                    xmax = int(min(cam_w,(xyxy[2][i] * cam_w)))
+
+                    # optionally print bounding boxes (for debugging)
+                    #print("("+str(xmin)+","+str(ymin)+"), ("+str(xmax)+","+str(ymax)+")")
                     
                     cv2.rectangle(frame, (xmin,ymin), (xmax,ymax), (10, 255, 0), 2)
 
                     # Draw label
                     object_name = labels[int(classes[i])] # Look up object name from "labels" array using class index
                     label = '%s: %d%%' % (object_name, int(scores[i]*100)) # Example: 'person: 72%'
+                    # also print output to the console (useful when boxes overlap)
+                    print(str(object_name) + ":" + str(int(scores[i]*100)) + "%")
                     labelSize, baseLine = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2) # Get font size
                     label_ymin = max(ymin, labelSize[1] + 10) # Make sure not to draw label too close to top of window
                     cv2.rectangle(frame, (xmin, label_ymin-labelSize[1]-10), (xmin+labelSize[0], label_ymin+baseLine-10), (255, 255, 255), cv2.FILLED) # Draw white box to put label text in
@@ -178,7 +224,6 @@ if __name__ == 'main':
             # Press 'q' to quit
             if cv2.waitKey(1) == ord('q'):
                 break
-        #end copy
 
         #handle if we break as well
         cv2.destroyAllWindows()
