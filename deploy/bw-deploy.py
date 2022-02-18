@@ -87,7 +87,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '-r',
         '--resolution',
-        default='??x??',
+        default='640x480',
         help='desired camera resolution (assuming camera supports it)'
     )
 

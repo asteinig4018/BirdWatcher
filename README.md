@@ -26,6 +26,7 @@ The deployment folder contains everything necessary for deploying this model on 
 ```
 python3 bw-deploy.py -m best-fp16.tflite
 ```
+To cleanly exit, hit `q` while on the window with the image. `CTRL-C` has a tendency to get the camera stuck.
 
 #### Debugging
 OpenCV requires a bunch of packages and will give you weird errors until you install them all with apt-get. I tested this on an older Pi running Python 3.5 and was able to get all the packages.
